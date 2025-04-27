@@ -271,6 +271,7 @@
 
 		<hr class="border-gray-50 dark:border-gray-850 my-2" />
 
+		{#if $user?.role === 'admin'}
 		<div class="flex justify-between items-center text-sm">
 			<div class="  font-medium">{$i18n.t('API keys')}</div>
 			<button
@@ -429,6 +430,7 @@
 					</div>
 				{/if}
 			</div>
+		{/if}
 		{/if}
 	</div>
 
