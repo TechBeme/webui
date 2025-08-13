@@ -1930,7 +1930,7 @@ async def get_manifest_json():
         return {
             "name": app.state.WEBUI_NAME,
             "short_name": app.state.WEBUI_NAME,
-            "description": f"{app.state.WEBUI_NAME} is an open, extensible, user-friendly interface for AI that adapts to your workflow.",
+            "description": f"Acesse ChatGPT, Gemini, DeepSeek e + IAs em um só lugar! Gere imagens com IA e economize em assinaturas. Interface simples e intuitiva. Experimente!",
             "start_url": "/",
             "display": "standalone",
             "background_color": "#343541",
