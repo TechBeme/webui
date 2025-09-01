@@ -77,6 +77,7 @@ from open_webui.utils.misc import (
     get_system_message,
     prepend_to_first_user_message_content,
     convert_logit_bias_input_to_json,
+    get_content_from_message,
 )
 from open_webui.utils.tools import get_tools
 from open_webui.utils.plugin import load_function_module_by_id
@@ -145,7 +146,7 @@ async def chat_completion_tools_handler(
     def get_tools_function_calling_payload(messages, task_model_id, content):
         user_message = get_last_user_message(messages)
         history = "\n".join(
-            f"{message['role'].upper()}: \"\"\"{message['content']}\"\"\""
+            f"{message['role'].upper()}: \"\"\"{get_content_from_message(message)}\"\"\""
             for message in messages[::-1][:4]
         )
 
