@@ -242,7 +242,8 @@
 									<span class="relative inline-flex rounded-full size-2 bg-green-500" />
 								</span>
 							</div>
-
+							
+						{#if role === 'admin'}
 							<div class=" ">
 								<span class="">
 									{$i18n.t('Active Users')}:
@@ -251,6 +252,7 @@
 									{usage?.user_ids?.length}
 								</span>
 							</div>
+						{/if}
 						</div>
 					</Tooltip>
 				{/if}
