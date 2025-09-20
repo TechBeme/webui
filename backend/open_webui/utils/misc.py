@@ -170,7 +170,7 @@ def add_or_update_user_message(content: str, messages: list[dict]):
     """
 
     if messages and messages[-1].get("role") == "user":
-        messages[-1]["content"] = f"{messages[-1]['content']}\n{content}"
+        messages[-1]["content"] = f"{get_content_from_message(messages[-1])}\n{content}"
     else:
         # Insert at the end
         messages.append({"role": "user", "content": content})
