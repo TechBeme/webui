@@ -160,7 +160,7 @@
 						on:click={() => {
 							show = false;
 						}}
-						href="https://docs.openwebui.com"
+						href="https://yuia.com.br/docs/"
 					>
 						<QuestionMarkCircle className="size-5" />
 						<div class="flex items-center">{$i18n.t('Documentation')}</div>
@@ -175,7 +175,7 @@
 						on:click={() => {
 							show = false;
 						}}
-						href="https://github.com/open-webui/open-webui/releases"
+						href="https://www.youtube.com/@YuIAbr"
 					>
 						<Map className="size-5" />
 						<div class="flex items-center">{$i18n.t('Releases')}</div>
@@ -219,7 +219,7 @@
 				<div class=" self-center truncate">{$i18n.t('Sign Out')}</div>
 			</DropdownMenu.Item>
 
-			{#if usage}
+			{#if usage && role === 'admin' }
 				{#if usage?.user_ids?.length > 0}
 					<hr class=" border-gray-50 dark:border-gray-800 my-1 p-0" />
 
