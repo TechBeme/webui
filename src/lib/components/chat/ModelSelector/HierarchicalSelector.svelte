@@ -107,12 +107,13 @@
 						}
 
 						if (!tagMap.has(tagName)) {
-							// Usar o ícone/profile_image_url do primeiro modelo dessa tag
-							const icon = item.model?.info?.meta?.profile_image_url || '';
-							tagMap.set(tagName, {
-								tag: tagName,
-								models: [],
-								icon: icon
+						// Armazenar model.id para construir URL da API depois
+						const modelId = item.model?.id || '';
+						console.log('🔍 [TAGMAP] Tag:', tagName, '| Model ID:', modelId, '| item.model:', item.model);
+						tagMap.set(tagName, {
+							tag: tagName,
+							models: [],
+							icon: modelId
 							});
 						}
 						tagMap.get(tagName)!.models.push(item);
@@ -577,8 +578,8 @@
 									<img
 									src={`/api/v1/models/model/profile/image?id=${group.icon}&lang=${$i18n.language}`}
 										alt={getDisplayTag(group.tag)}
-										class="size-5 rounded-sm flex-shrink-0"
-									/>
+										class="size-5 rounded-sm flex-shrink-0"									on:load={() => console.log('✅ [IMG LOAD SEARCH] Tag:', getDisplayTag(group.tag), '| URL:', `/api/v1/models/model/profile/image?id=${group.icon}&lang=${$i18n.language}`)}
+									on:error={(e) => console.log('❌ [IMG ERROR SEARCH] Tag:', getDisplayTag(group.tag), '| URL:', `/api/v1/models/model/profile/image?id=${group.icon}&lang=${$i18n.language}`, '| Error:', e)}									/>
 								{:else if group.tag === SPECIAL_TAG_ASSISTANT}
 									<svg
 										class="size-5 flex-shrink-0 text-gray-400"
@@ -711,8 +712,8 @@
 									<img
 									src={`/api/v1/models/model/profile/image?id=${group.icon}&lang=${$i18n.language}`}
 										alt={getDisplayTag(group.tag)}
-										class="size-5 rounded-sm flex-shrink-0"
-									/>
+										class="size-5 rounded-sm flex-shrink-0"									on:load={() => console.log('✅ [IMG LOAD] Tag:', getDisplayTag(group.tag), '| URL:', `/api/v1/models/model/profile/image?id=${group.icon}&lang=${$i18n.language}`)}
+									on:error={(e) => console.log('❌ [IMG ERROR] Tag:', getDisplayTag(group.tag), '| URL:', `/api/v1/models/model/profile/image?id=${group.icon}&lang=${$i18n.language}`, '| Error:', e)}									/>
 								{:else if group.tag === SPECIAL_TAG_ASSISTANT}
 									<svg
 										class="size-5 flex-shrink-0 text-gray-400"
