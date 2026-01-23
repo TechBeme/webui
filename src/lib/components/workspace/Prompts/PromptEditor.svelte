@@ -186,7 +186,7 @@
 				</div>
 
 				<div class="text-xs text-gray-400 dark:text-gray-500 underline">
-					<a href="https://docs.openwebui.com/features/workspace/prompts" target="_blank">
+					<a href="https://yuia.com.br/docs/espaco-de-trabalho/prompts#-o-poder-das-vari%C3%A1veis-seus-prompts-inteligentes" target="_blank">
 						{$i18n.t('To learn more about powerful prompt variables, click here')}
 					</a>
 				</div>
