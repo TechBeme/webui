@@ -370,6 +370,17 @@ async def speech(request: Request, user=Depends(get_verified_user)):
     r = None
     if request.app.state.config.TTS_ENGINE == "openai":
         payload["model"] = request.app.state.config.TTS_MODEL
+        req_payload = {
+            **payload,
+            "tags": ["yuia", "speech_generation"],
+            "user": user.id,
+            "langfuse_metadata": {
+                "interface": "yuia",
+                "type": "speech_generation",
+                "tags": ["yuia", "speech_generation"],
+                "trace_user_id": user.email,
+            },
+        }
 
         try:
             timeout = aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
@@ -390,7 +401,7 @@ async def speech(request: Request, user=Depends(get_verified_user)):
 
                 r = await session.post(
                     url=f"{request.app.state.config.TTS_OPENAI_API_BASE_URL}/audio/speech",
-                    json=payload,
+                    json=req_payload,
                     headers=headers,
                     ssl=AIOHTTP_CLIENT_SESSION_SSL,
                 )
