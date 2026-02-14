@@ -30,6 +30,8 @@
 		/>
 		<meta name="theme-color" content="#171717" />
 		<meta name="robots" content="noindex,nofollow" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
 		<script src="/static/loader.js" defer crossorigin="use-credentials"></script>
 		<link rel="stylesheet" href="/static/custom.css" crossorigin="use-credentials" />
@@ -173,6 +175,12 @@
 				Footer content
 			</span> -->
 		</div>
+		<script>
+			if ('serviceWorker' in navigator) {
+				navigator.serviceWorker.register('/sw.js', { scope: '/' });
+			}
+		</script>
+		<script src="/sw-register.js" defer></script>
 	</body>
 
 	<style type="text/css" nonce="">
