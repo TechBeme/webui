@@ -515,6 +515,10 @@ async def chat_completion_tools_handler(
             else f"Query: {user_message}"
         )
 
+        __metadata__ = extra_params["__metadata__"]
+        chat_id = __metadata__.get("chat_id")
+        __user__ = extra_params["__user__"]
+
         return {
             "model": task_model_id,
             "messages": [
@@ -522,7 +526,17 @@ async def chat_completion_tools_handler(
                 {"role": "user", "content": prompt},
             ],
             "stream": False,
+            "tags": ["yuia", "tools_calling"],
             "metadata": {"task": str(TASKS.FUNCTION_CALLING)},
+            "user": __user__.get("id"),
+            "langfuse_metadata": {
+                "session_id": chat_id,
+                "trace_name": f"chat:{chat_id}",
+                "interface": "yuia",
+                "type": "tools_calling",
+                "tags": ["yuia", "tools_calling"],
+                "trace_user_id": __user__.get("email"),
+            },
         }
 
     event_caller = extra_params["__event_call__"]

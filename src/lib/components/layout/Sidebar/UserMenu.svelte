@@ -293,7 +293,7 @@
 						on:click={() => {
 							show = false;
 						}}
-						href="https://docs.openwebui.com"
+						href="https://yuia.com.br/docs/"
 					>
 						<QuestionMarkCircle className="size-5" />
 						<div class="flex items-center">{$i18n.t('Documentation')}</div>
@@ -308,7 +308,7 @@
 						on:click={() => {
 							show = false;
 						}}
-						href="https://github.com/open-webui/open-webui/releases"
+						href="https://www.youtube.com/@YuIAbr"
 					>
 						<Map className="size-5" />
 						<div class="flex items-center">{$i18n.t('Releases')}</div>

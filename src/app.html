@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 	<head>
 		<meta charset="utf-8" />
 		<link rel="icon" type="image/png" href="/static/favicon.png" crossorigin="use-credentials" />
@@ -30,6 +30,8 @@
 		/>
 		<meta name="theme-color" content="#171717" />
 		<meta name="robots" content="noindex,nofollow" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
 		<script src="/static/loader.js" defer crossorigin="use-credentials"></script>
 		<link rel="stylesheet" href="/static/custom.css" crossorigin="use-credentials" />
@@ -103,7 +105,7 @@
 			})();
 		</script>
 
-		<title>Open WebUI</title>
+		<title>YuIA</title>
 
 		%sveltekit.head%
 	</head>
@@ -173,6 +175,7 @@
 				Footer content
 			</span> -->
 		</div>
+		<script src="/static/sw-register.js" defer crossorigin="use-credentials"></script>
 	</body>
 
 	<style type="text/css" nonce="">
