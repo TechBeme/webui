@@ -1,6 +1,6 @@
 from enum import Enum
 
-# Cache bust: force Docker layer rebuild
+
 class MESSAGES(str, Enum):
     DEFAULT = lambda msg="": f"{msg if msg else ''}"
     MODEL_ADDED = lambda model="": f"The model '{model}' has been added successfully."

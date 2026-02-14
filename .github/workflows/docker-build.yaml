@@ -2,6 +2,12 @@ name: Create and publish Docker images with specific build args
 
 on:
   workflow_dispatch:
+    inputs:
+      no-cache:
+        description: 'Build without Docker layer cache'
+        required: false
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -93,7 +99,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
+          cache-from: ${{ inputs.no-cache != true && format('type=registry,ref={0}', steps.cache-meta.outputs.tags) || '' }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
           build-args: |
             BUILD_HASH=${{ github.sha }}
@@ -197,7 +203,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
+          cache-from: ${{ inputs.no-cache != true && format('type=registry,ref={0}', steps.cache-meta.outputs.tags) || '' }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
           build-args: |
             BUILD_HASH=${{ github.sha }}
@@ -302,7 +308,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
+          cache-from: ${{ inputs.no-cache != true && format('type=registry,ref={0}', steps.cache-meta.outputs.tags) || '' }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
           build-args: |
             BUILD_HASH=${{ github.sha }}
@@ -405,7 +411,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
+          cache-from: ${{ inputs.no-cache != true && format('type=registry,ref={0}', steps.cache-meta.outputs.tags) || '' }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
           build-args: |
             BUILD_HASH=${{ github.sha }}
@@ -507,7 +513,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=registry,ref=${{ steps.cache-meta.outputs.tags }}
+          cache-from: ${{ inputs.no-cache != true && format('type=registry,ref={0}', steps.cache-meta.outputs.tags) || '' }}
           cache-to: type=registry,ref=${{ steps.cache-meta.outputs.tags }},mode=max
           build-args: |
             BUILD_HASH=${{ github.sha }}
