@@ -12,7 +12,7 @@ const PRECACHE_URLS = [
   '/static/web-app-manifest-192x192.png',
   '/static/web-app-manifest-512x512.png',
   '/static/user.png',
-  '/static/offline.html'
+  '/offline.html'
 ];
 
 // Padrões de URL que devem ser sempre buscados da rede
@@ -140,7 +140,7 @@ async function networkFirst(request) {
     // Se for navegação e não há cache, retorna página offline
     if (request.mode === 'navigate') {
       const offlineCache = await caches.open(CACHE_NAME);
-      const fallback = await offlineCache.match('/static/offline.html');
+      const fallback = await offlineCache.match('/offline.html');
       if (fallback) {
         return fallback;
       }
