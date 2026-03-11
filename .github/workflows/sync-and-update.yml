@@ -1,0 +1,437 @@
+name: Sync Upstream & Update
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Operation mode"
+        required: true
+        default: "full"
+        type: choice
+        options:
+          - full              # Sync upstream + cherry-pick + translate + deploy
+          - translate-only    # Skip sync, just apply branding + translate + deploy
+          - sync-only         # Only sync webui branch
+      force:
+        description: "Force update even if no upstream changes"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  MODE: ${{ inputs.mode || 'full' }}
+  UPSTREAM_REPO: "https://github.com/open-webui/open-webui.git"
+
+jobs:
+  sync-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      # ──────────────────────────────────────────────
+      # SETUP
+      # ──────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch all remotes
+        run: |
+          git remote add upstream "$UPSTREAM_REPO" 2>/dev/null || true
+          git fetch upstream main --tags --force
+          git fetch origin --tags --force
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+
+      # ──────────────────────────────────────────────
+      # STEP 1: DETECT VERSIONS
+      # ──────────────────────────────────────────────
+      - name: Detect versions
+        id: check
+        run: |
+          # Find the latest version branch with custom commits
+          # Supports both naming conventions: "X.Y.Z" (new) and "vX.Y.Z-setup" (legacy)
+          LATEST_BRANCH=$(git branch -r --list 'origin/[0-9]*' 'origin/v*-setup' \
+            | sed 's|origin/||; s/-setup$//' \
+            | sort -t. -k1,1n -k2,2n -k3,3n \
+            | tail -1 | xargs)
+
+          if [ -z "$LATEST_BRANCH" ]; then
+            echo "::error::Nenhuma branch de versão encontrada!"
+            exit 1
+          fi
+
+          # Check if it's new format (X.Y.Z) or legacy (vX.Y.Z-setup)
+          if git rev-parse "origin/${LATEST_BRANCH}" >/dev/null 2>&1; then
+            SOURCE_BRANCH="${LATEST_BRANCH}"
+          elif git rev-parse "origin/v${LATEST_BRANCH}-setup" >/dev/null 2>&1; then
+            SOURCE_BRANCH="v${LATEST_BRANCH}-setup"
+          else
+            echo "::error::Branch para versão ${LATEST_BRANCH} não encontrada!"
+            exit 1
+          fi
+
+          CURRENT_VERSION=$(echo "$LATEST_BRANCH" | sed 's/^v//')
+          echo "Source branch: $SOURCE_BRANCH (version: $CURRENT_VERSION)"
+          echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "source_branch=$SOURCE_BRANCH" >> "$GITHUB_OUTPUT"
+
+          if [ "$MODE" = "translate-only" ]; then
+            echo "Mode: translate-only"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "do_sync=false" >> "$GITHUB_OUTPUT"
+            echo "do_cherrypick=false" >> "$GITHUB_OUTPUT"
+            echo "do_translate=true" >> "$GITHUB_OUTPUT"
+            echo "version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+            echo "version_branch=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git checkout webui
+          OLD_SHA=$(git rev-parse HEAD)
+          NEW_SHA=$(git rev-parse upstream/main)
+
+          UPSTREAM_VERSION=$(git show upstream/main:package.json | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])")
+
+          echo "Current: $CURRENT_VERSION (webui: $OLD_SHA)"
+          echo "Upstream: $UPSTREAM_VERSION ($NEW_SHA)"
+          echo "version=$UPSTREAM_VERSION" >> "$GITHUB_OUTPUT"
+          echo "old_sha=$OLD_SHA" >> "$GITHUB_OUTPUT"
+
+          if [ "$OLD_SHA" = "$NEW_SHA" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "No upstream changes"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "do_sync=false" >> "$GITHUB_OUTPUT"
+            echo "do_cherrypick=false" >> "$GITHUB_OUTPUT"
+            echo "do_translate=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Upstream has changes!"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "do_sync=true" >> "$GITHUB_OUTPUT"
+            echo "do_cherrypick=${{ env.MODE != 'sync-only' }}" >> "$GITHUB_OUTPUT"
+            echo "do_translate=${{ env.MODE != 'sync-only' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Exit if no changes
+        if: steps.check.outputs.has_changes == 'false' && steps.check.outputs.do_translate != 'true'
+        run: |
+          echo "## Sync Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Mode:** $MODE" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Result:** Nenhuma mudança no upstream" >> "$GITHUB_STEP_SUMMARY"
+
+      # ──────────────────────────────────────────────
+      # STEP 2: SYNC WEBUI
+      # ──────────────────────────────────────────────
+      - name: Save previous pt-BR translation
+        if: steps.check.outputs.do_translate == 'true'
+        run: |
+          mkdir -p /tmp/prev-translations
+          git show origin/main:src/lib/i18n/locales/pt-BR/translation.json \
+            > /tmp/prev-translations/pt-BR.json 2>/dev/null \
+            || echo "{}" > /tmp/prev-translations/pt-BR.json
+          KEYS=$(python3 -c "import json; print(len(json.load(open('/tmp/prev-translations/pt-BR.json'))))")
+          echo "Saved previous pt-BR ($KEYS keys)"
+
+      - name: Sync webui branch
+        if: steps.check.outputs.do_sync == 'true'
+        run: |
+          git checkout webui
+          git merge upstream/main --ff-only
+          git push origin webui
+
+      # ──────────────────────────────────────────────
+      # STEP 3: CHERRY-PICK → NEW VERSION BRANCH
+      # ──────────────────────────────────────────────
+      - name: Cherry-pick custom commits
+        if: steps.check.outputs.do_cherrypick == 'true'
+        id: cherrypick
+        shell: bash
+        run: |
+          OLD_WEBUI="${{ steps.check.outputs.old_sha }}"
+          VERSION="${{ steps.check.outputs.version }}"
+          CURRENT_VERSION="${{ steps.check.outputs.current_version }}"
+          SOURCE_BRANCH="${{ steps.check.outputs.source_branch }}"
+
+          # Source of custom commits = detected version branch
+          git checkout "origin/${SOURCE_BRANCH}"
+          echo "Using branch ${SOURCE_BRANCH} as source"
+
+          # Get custom commits, excluding merges and CI-generated commits
+          COMMIT_LIST=$(git log --reverse --format="%H" --no-merges "$OLD_WEBUI"..HEAD | while read -r H; do
+            MSG=$(git log --format="%s" -1 "$H")
+            case "$MSG" in
+              ci:*|"Merge pull request"*|"Merge branch"*) ;; # skip
+              *) echo "$H" ;;
+            esac
+          done)
+          COMMIT_COUNT=$(echo "$COMMIT_LIST" | grep -c . || echo 0)
+          echo "Custom commits to replay: $COMMIT_COUNT"
+          echo "$COMMIT_LIST" | while read -r H; do
+            [ -z "$H" ] && continue
+            echo "  $(git log --format='%h %s' -1 "$H")"
+          done
+
+          # Start new branch from updated webui
+          TEMP="update/${VERSION}"
+          git checkout -B "$TEMP" webui
+
+          SUCCESS=0
+          FAIL=0
+          FAILED_COMMITS=""
+          CONFLICT_REPORT="/tmp/conflict_report.md"
+          : > "$CONFLICT_REPORT"
+
+          while IFS= read -r HASH; do
+            [ -z "$HASH" ] && continue
+            MSG=$(git log --format="%s" -1 "$HASH")
+            SHORT=$(git log --format="%h" -1 "$HASH")
+
+            echo "::group::Cherry-picking $SHORT — $MSG"
+            if git cherry-pick "$HASH" --no-edit 2>&1; then
+              echo "✅ OK"
+              SUCCESS=$((SUCCESS + 1))
+            else
+              FAIL=$((FAIL + 1))
+              FAILED_COMMITS="$FAILED_COMMITS $SHORT"
+
+              {
+                echo "---"
+                echo "### ❌ \`$SHORT\` — $MSG"
+                echo ""
+                echo "**Arquivos em conflito:**"
+                echo ""
+
+                CONFLICTED=$(git diff --name-only --diff-filter=U 2>/dev/null)
+                if [ -n "$CONFLICTED" ]; then
+                  echo "$CONFLICTED" | while read -r FILE; do
+                    echo "- \`$FILE\`"
+                  done
+                  echo ""
+
+                  echo "$CONFLICTED" | while read -r FILE; do
+                    echo "<details>"
+                    echo "<summary><code>$FILE</code> — conflito</summary>"
+                    echo ""
+                    echo '```diff'
+                    git diff "$FILE" 2>/dev/null | head -200
+                    echo '```'
+                    echo ""
+                    echo "</details>"
+                    echo ""
+                  done
+                fi
+
+                echo "<details>"
+                echo "<summary>Diff original do commit <code>$SHORT</code></summary>"
+                echo ""
+                echo '```diff'
+                git show "$HASH" --stat --format="" 2>/dev/null
+                echo '```'
+                echo ""
+                echo "</details>"
+                echo ""
+                echo "**Para aplicar manualmente:**"
+                echo '```bash'
+                echo "git cherry-pick $HASH"
+                echo "# resolver conflitos"
+                echo "git add . && git cherry-pick --continue"
+                echo '```'
+                echo ""
+              } >> "$CONFLICT_REPORT"
+
+              git cherry-pick --abort 2>/dev/null || git reset --hard HEAD
+            fi
+            echo "::endgroup::"
+          done <<< "$COMMIT_LIST"
+
+          echo "Results: $SUCCESS OK, $FAIL failed out of $COMMIT_COUNT"
+
+          if [ "$FAIL" -eq 0 ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            echo "version_branch=${VERSION}" >> "$GITHUB_OUTPUT"
+
+            # Rename to final version branch
+            git branch -M "$TEMP" "${VERSION}"
+            git push origin "${VERSION}" --force
+          else
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            echo "branch=$TEMP" >> "$GITHUB_OUTPUT"
+            echo "failed=$FAILED_COMMITS" >> "$GITHUB_OUTPUT"
+
+            git push origin "$TEMP" --force
+
+            ISSUE_BODY="/tmp/issue_body.md"
+            {
+              echo "## ⚠️ ${VERSION} — $FAIL commit(s) com conflito"
+              echo ""
+              echo "Cherry-pick sobre \`webui\` (${VERSION}) falhou em **$FAIL** de **$COMMIT_COUNT** commits."
+              echo ""
+              echo "| # | Commit | Descrição | Status |"
+              echo "|---|--------|-----------|--------|"
+
+              I=1
+              while IFS= read -r HASH; do
+                [ -z "$HASH" ] && continue
+                MSG=$(git log --format="%s" -1 "$HASH")
+                SHORT=$(git log --format="%h" -1 "$HASH")
+                if echo "$FAILED_COMMITS" | grep -q "$SHORT"; then
+                  echo "| $I | \`$SHORT\` | $MSG | ❌ |"
+                else
+                  echo "| $I | \`$SHORT\` | $MSG | ✅ |"
+                fi
+                I=$((I + 1))
+              done <<< "$COMMIT_LIST"
+
+              echo ""
+              cat "$CONFLICT_REPORT"
+              echo ""
+              echo "---"
+              echo "### Como resolver"
+              echo ""
+              echo '```bash'
+              echo "git fetch origin $TEMP"
+              echo "git checkout $TEMP"
+              echo ""
+              echo "# Cherry-pick dos commits que falharam"
+              echo "# Resolver os conflitos em cada um"
+              echo ""
+              echo "# Renomear para versão final"
+              echo "git branch -M $TEMP ${VERSION}"
+              echo "git push origin ${VERSION} --force"
+              echo "git push origin --delete $TEMP 2>/dev/null"
+              echo ""
+              echo "# Re-executar workflow em translate-only"
+              echo '```'
+            } > "$ISSUE_BODY"
+
+            gh issue create \
+              --title "⚠️ ${VERSION} — $FAIL conflito(s)" \
+              --body-file "$ISSUE_BODY" \
+              --label "sync-conflict" \
+              2>/dev/null || echo "::warning::Falha ao criar issue"
+
+            cat "$ISSUE_BODY" >> "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+
+      - name: Stop on conflicts
+        if: steps.cherrypick.outputs.status == 'conflict'
+        run: |
+          echo "::error::Conflitos no cherry-pick. Veja a issue ou o summary."
+          exit 0
+
+      # ──────────────────────────────────────────────
+      # STEP 4: BRANDING + TRANSLATION
+      # ──────────────────────────────────────────────
+      - name: Setup Python
+        if: steps.check.outputs.do_translate == 'true' && steps.cherrypick.outputs.status != 'conflict'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        if: steps.check.outputs.do_translate == 'true' && steps.cherrypick.outputs.status != 'conflict'
+        run: |
+          # Restore scripts from origin/main if missing (can happen after a force-push race)
+          if [ ! -f scripts/requirements-ci.txt ]; then
+            echo "scripts/ not found in checkout, restoring from origin/main..."
+            git checkout origin/main -- scripts/ .github/workflows/sync-and-update.yml
+          fi
+          pip install -r scripts/requirements-ci.txt
+          cp -r scripts/ /tmp/workflow-scripts/
+          cp .github/workflows/sync-and-update.yml /tmp/workflow-sync.yml
+
+      - name: Apply branding
+        if: steps.check.outputs.do_translate == 'true' && steps.cherrypick.outputs.status != 'conflict'
+        id: branding
+        run: |
+          VERSION_BRANCH="${{ steps.cherrypick.outputs.version_branch || steps.check.outputs.version_branch }}"
+          git checkout "$VERSION_BRANCH"
+          python /tmp/workflow-scripts/rebrand-translations.py
+
+          if git diff --quiet; then
+            echo "changes=0" >> "$GITHUB_OUTPUT"
+          else
+            CHANGED=$(git diff --name-only | wc -l)
+            echo "changes=$CHANGED" >> "$GITHUB_OUTPUT"
+            git add src/lib/i18n/locales/
+            git commit -m "ci: branding YuIA (v${{ steps.check.outputs.version }})"
+          fi
+
+      - name: Translate missing pt-BR
+        if: steps.check.outputs.do_translate == 'true' && steps.cherrypick.outputs.status != 'conflict'
+        id: translation
+        run: |
+          python /tmp/workflow-scripts/translate-missing.py
+
+          if git diff --quiet; then
+            echo "changes=0" >> "$GITHUB_OUTPUT"
+          else
+            git add src/lib/i18n/locales/pt-BR/
+            git commit -m "ci: tradução pt-BR (v${{ steps.check.outputs.version }})"
+            echo "changes=1" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          PREV_TRANSLATION_FILE: "/tmp/prev-translations/pt-BR.json"
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'gemini-3-flash-preview' }}
+
+      # ──────────────────────────────────────────────
+      # STEP 5: PUBLISH TO MAIN
+      # ──────────────────────────────────────────────
+      - name: Update main
+        if: steps.check.outputs.do_translate == 'true' && steps.cherrypick.outputs.status != 'conflict'
+        run: |
+          VERSION="${{ steps.check.outputs.version }}"
+
+          # main = version branch + branding + translation (current HEAD)
+          CURRENT_SHA=$(git rev-parse HEAD)
+          git checkout main
+          git reset --hard "$CURRENT_SHA"
+
+          # Restore CI infrastructure (scripts + workflow) which only lives on main
+          mkdir -p scripts/ .github/workflows/
+          cp -r /tmp/workflow-scripts/. scripts/
+          cp /tmp/workflow-sync.yml .github/workflows/sync-and-update.yml
+          git add scripts/ .github/workflows/sync-and-update.yml 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "ci: preservar scripts de automação (v${VERSION})"
+
+          git push origin main --force-with-lease
+
+          echo "main → ${VERSION}"
+
+      # ──────────────────────────────────────────────
+      # SUMMARY
+      # ──────────────────────────────────────────────
+      - name: Summary
+        if: always() && (steps.check.outputs.has_changes == 'true' || steps.check.outputs.do_translate == 'true')
+        run: |
+          if [ "${{ steps.cherrypick.outputs.status }}" = "conflict" ]; then
+            exit 0
+          fi
+
+          echo "## Sync Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Mode:** $MODE" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** ${{ steps.check.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ steps.cherrypick.outputs.status }}" = "success" ]; then
+            echo "- **Cherry-pick:** ✅" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Branch:** \`${{ steps.cherrypick.outputs.version_branch }}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "- **Branding:** ${{ steps.branding.outputs.changes || '0' }} arquivos" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Tradução:** ${{ steps.translation.outputs.changes || '0' }} mudanças" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ steps.translation.outputs.missing_count }}" ] && [ "${{ steps.translation.outputs.missing_count }}" != "0" ]; then
+            echo "- **⚠️ Chaves sem tradução:** ${{ steps.translation.outputs.missing_count }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
